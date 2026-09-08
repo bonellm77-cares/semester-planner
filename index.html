@@ -59,6 +59,8 @@
   .progress-bar{height:6px;background:var(--bg);border-radius:3px;overflow:hidden;margin-bottom:10px}
   .progress-fill{height:100%;background:var(--green-text)}
   select#ev-repeat{margin-bottom:0}
+  #info-toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#2C2A26;color:#FFFCF5;font-size:12px;padding:8px 14px;border-radius:8px;max-width:260px;text-align:center;z-index:9999;opacity:0;pointer-events:none;transition:opacity 0.2s}
+  #info-toast.show{opacity:1}
   body.focus{background:#D4E6F1}
   body.focus .card,body.focus .accordion-body{font-size:15px;line-height:1.7}
   body.focus .muted{font-size:13px}
@@ -66,6 +68,7 @@
 </style>
 </head>
 <body>
+<div id="info-toast"></div>
 
 <h1>Your planner</h1>
 
@@ -346,6 +349,14 @@ function save(key, val){
     clearTimeout(syncPushTimer);
     syncPushTimer = setTimeout(()=>{ pushToCloud(pin, true); }, 1500);
   }
+}
+let infoToastTimer = null;
+function showInfoToast(msg){
+  const t = document.getElementById('info-toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(infoToastTimer);
+  infoToastTimer = setTimeout(()=>{ t.classList.remove('show'); }, 2200);
 }
 async function pushToCloud(pin, silent){
   try{
@@ -656,11 +667,16 @@ function renderEvents(){
       const checkCircle = ev.done
         ? `<span aria-hidden="true" style="width:18px;height:18px;border-radius:50%;background:#0F6E56;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:11px;color:#fff">&#10003;</span>`
         : `<span aria-hidden="true" style="width:18px;height:18px;border-radius:50%;border:1.5px solid ${txt};flex-shrink:0;display:inline-block"></span>`;
+      const isTracked = projects.some(p=>p.title===ev.title && p.dueDate===ev.date);
+      const trackBtn = isTracked
+        ? `<button class="icon-btn ev-track-btn" data-id="${ev.id}" data-tracked="1" aria-label="Already added to project tracker" style="color:#0F6E56;opacity:0.55;cursor:default">&#10003;</button>`
+        : `<button class="icon-btn ev-track-btn" data-id="${ev.id}" data-tracked="0" aria-label="Track as project" style="color:${txt}">&#128204;</button>`;
+      const infoBtn = `<button class="icon-btn ev-track-info-btn" aria-label="What does this button do?" style="color:${txt};font-size:11px;padding:2px;margin-right:2px">&#9432;</button>`;
       const row = document.createElement('div');
       row.className='event-row';
       row.style.background=bg;
       row.style.marginTop='6px';
-      row.innerHTML = `<button class="icon-btn ev-done-btn" data-id="${ev.id}" aria-label="${ev.done ? 'Mark not done' : 'Mark done'}" style="margin-right:8px;padding:0">${checkCircle}</button><div style="flex:1"><p style="margin:0;font-size:13px;color:${txt};${titleStyle}">${courseLabel}${ev.title}${repeatLabel}</p>${isPast ? `<p style="margin:0;font-size:11px;color:${txt}">Overdue &middot; was due ${dateStr}</p>` : ''}</div><span style="font-size:12px;color:${txt};margin-right:8px">${dateStr}</span><button class="icon-btn ev-track-btn" data-id="${ev.id}" aria-label="Track as project" style="color:${txt}">&#128204;</button><button class="icon-btn ev-edit-btn" data-id="${ev.id}" aria-label="Edit event" style="color:${txt};font-size:16px">&#9998;</button><button class="icon-btn ev-del-btn" data-id="${ev.id}" aria-label="Delete event" style="color:${txt}">&#128465;</button>`;
+      row.innerHTML = `<button class="icon-btn ev-done-btn" data-id="${ev.id}" aria-label="${ev.done ? 'Mark not done' : 'Mark done'}" style="margin-right:8px;padding:0">${checkCircle}</button><div style="flex:1"><p style="margin:0;font-size:13px;color:${txt};${titleStyle}">${courseLabel}${ev.title}${repeatLabel}</p>${isPast ? `<p style="margin:0;font-size:11px;color:${txt}">Overdue &middot; was due ${dateStr}</p>` : ''}</div><span style="font-size:12px;color:${txt};margin-right:8px">${dateStr}</span>${infoBtn}${trackBtn}<button class="icon-btn ev-edit-btn" data-id="${ev.id}" aria-label="Edit event" style="color:${txt};font-size:16px">&#9998;</button><button class="icon-btn ev-del-btn" data-id="${ev.id}" aria-label="Delete event" style="color:${txt}">&#128465;</button>`;
       body.appendChild(row);
     });
     list.appendChild(body);
@@ -705,21 +721,21 @@ function renderEvents(){
       document.getElementById('add-form').scrollIntoView({behavior:'smooth', block:'center'});
     });
   });
+  list.querySelectorAll('.ev-track-info-btn').forEach(btn=>{
+    btn.addEventListener('click',(e)=>{
+      e.stopPropagation();
+      showInfoToast('Adds this to your project tracker so you can log progress and get nudges.');
+    });
+  });
   list.querySelectorAll('.ev-track-btn').forEach(btn=>{
     btn.addEventListener('click',()=>{
+      if(btn.dataset.tracked==='1') return;
       const ev = events.find(x=>x.id===btn.dataset.id);
       if(!ev) return;
-      const already = projects.some(p=>p.title===ev.title && p.dueDate===ev.date);
-      if(already){
-        btn.innerHTML = '&#10003;';
-        setTimeout(()=>{ btn.innerHTML = '&#128204;'; }, 1200);
-        return;
-      }
       projects.push({ id:'p'+Date.now()+Math.random().toString(16).slice(2), title:ev.title, course:ev.course||'', dueDate:ev.date, lastCheckin:null, milestones:[] });
       save('projects', projects);
       renderProjectList();
-      btn.innerHTML = '&#10003;';
-      setTimeout(()=>{ btn.innerHTML = '&#128204;'; }, 1200);
+      renderEvents();
     });
   });
   list.querySelectorAll('.ev-del-btn').forEach(btn=>{
